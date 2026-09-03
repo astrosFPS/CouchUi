@@ -1,4 +1,4 @@
-# Couch Launcher
+# CouchUI
 
 A tile-based, controller-first kiosk launcher for Ubuntu — the "Android TV
 box" experience for a PC that boots straight into a living-room UI instead of
