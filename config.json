@@ -6,7 +6,7 @@
     "units": "celsius"
   },
   "spotify": {
-    "clientId": "28219774a64e4918b2197220e6053702",
+    "clientId": "######",
     "redirectUri": "http://127.0.0.1:8888/callback"
   },
   "tiles": [
