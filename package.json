@@ -1,0 +1,14 @@
+{
+  "name": "couch-launcher",
+  "version": "0.1.0",
+  "description": "Android-TV-style kiosk launcher for Ubuntu, controller-first",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^44.1.0"
+  }
+}

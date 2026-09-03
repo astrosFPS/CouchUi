@@ -1,0 +1,57 @@
+{
+  "weather": {
+    "latitude": -36.8485,
+    "longitude": 174.7633,
+    "locationName": "Auckland",
+    "units": "celsius"
+  },
+  "spotify": {
+    "clientId": "28219774a64e4918b2197220e6053702",
+    "redirectUri": "http://127.0.0.1:8888/callback"
+  },
+  "tiles": [
+    {
+      "id": "brave",
+      "label": "Brave",
+      "subtitle": "Browser",
+      "command": "brave",
+      "args": [],
+      "color": "#E8622C",
+      "icon": "browser"
+    },
+    {
+      "id": "spotify-hub",
+      "label": "Spotify",
+      "subtitle": "Music",
+      "type": "spotify-hub",
+      "color": "#1DB954",
+      "icon": "spotify"
+    },
+    {
+      "id": "kodi",
+      "label": "Movies",
+      "subtitle": "Kodi",
+      "command": "kodi-omega",
+      "args": [],
+      "color": "#17B2E7",
+      "icon": "movie"
+    },
+    {
+      "id": "moonlight",
+      "label": "Games",
+      "subtitle": "Moonlight stream",
+      "command": "moonlight",
+      "args": [],
+      "color": "#6C5CE7",
+      "icon": "controller"
+    },
+    {
+      "id": "waydroid-hub",
+      "label": "Android Apps",
+      "subtitle": "Waydroid",
+      "type": "waydroid-hub",
+      "color": "#2D9CDB",
+      "prelaunch": "waydroid session start"
+    }
+  ]
+}

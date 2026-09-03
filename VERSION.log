@@ -1,0 +1,128 @@
+# CouchTato — Version Log
+
+Newest first. Entries cover user-facing changes, notable fixes, and
+anything that changes where files live or how things are configured.
+
+Versions before 0.1.0 are reconstructed retrospectively from the change
+history — they were not tagged at the time.
+
+---
+
+## 0.1.0
+
+* Added adaptive text color for image backgrounds: the background image is
+  sampled (downscaled to 32x32 off-screen, ~1ms, once per image load) and
+  clock, weather, and the footer hint legend each get their own text color
+  based on what's actually behind them. Runs per image, so slideshows
+  re-evaluate on every change.
+* Added high-variance detection for background regions — where a region is
+  too visually busy for any single text color to work across it, that text
+  gets a stronger shadow instead of a color that only half-works.
+* Fixed the black/white text threshold, which was set to an
+  intuitive-looking 0.4 but is mathematically 0.179 (the luminance where
+  black and white give equal contrast). The old value picked white text on
+  mid-gray backgrounds at 3.95:1 where black would have given 5.32:1. This
+  also affected solid-color backgrounds, not just images.
+* Added this version log.
+
+## 0.0.9
+
+* Reverted the packaging work (AppImage/.deb/.rpm builds, electron-builder,
+  desktop entry) — back to running from source with `npm start`.
+* Reverted `config.json` to living in the app folder. It had been moved to
+  the userData folder only because a system-installed app can't write to
+  its own install directory; with packaging gone, the indirection had no
+  purpose.
+
+## 0.0.8
+
+* Added a Settings → Updates tab: current version, last-checked time, a
+  "Search for update" button, and an automatic-updates toggle backed by a
+  24h scheduler that survives restarts.
+* Added `updater.js` as a deliberate stub — the surrounding wiring is
+  complete and calls it, so filling in the real check is a one-file change.
+  See DOCUMENTATION.md §3.8.
+
+## 0.0.7
+
+* Added a "Recently Played Songs" row to the Spotify home screen —
+  individual tracks, as distinct from "Jump back in", which groups by the
+  playlist/album a track was played from.
+* Added playlist pinning: pinned playlists sort to the front of "Your
+  Playlists" and are marked. Bound to X on the controller and the X key.
+* Fixed Spotify tiles stretching to absurd heights on long playlist names —
+  titles now clamp to two lines, subtitles to one, and the text panel has a
+  fixed height so tiles in a row stay uniform.
+* Fixed text and icons (including the settings cog and power button) going
+  unreadable in Light mode with a solid-color background. The auto-contrast
+  color was being applied globally, including to elements sitting on their
+  own opaque panel where it never belonged. Split into two independent
+  variable sets: one for panel text, one for text sitting directly on the
+  background.
+* Removed the track count from playlist tiles.
+
+## 0.0.6
+
+* Moved the Now Playing bar above the footer hint legend.
+* Added a progress bar to the Now Playing bar, above the track name.
+* Changed the play/pause button to reflect actual state — a pause icon when
+  playing, a play icon when paused, instead of a static combined icon.
+
+## 0.0.5
+
+* Added accent icons to the main tiles (browser, Spotify, controller, movie
+  clapperboard, folder), colored per-tile and legible in both themes.
+* Added tile icon support to `config.json` via an `icon` field.
+* Fixed the Kodi tile not launching — the kodi-omega snap installs its
+  binary as `kodi-omega`, not `kodi`.
+* Fixed `vaInitialize failed` warnings on startup in VMs. Disabling hardware
+  acceleration alone didn't stop it; VAAPI decode/encode is a separate
+  Chromium feature that probes independently and had to be disabled too.
+
+## 0.0.4
+
+* Added custom backgrounds: solid color (preset palette), single image, or
+  a slideshow with configurable interval and crossfade duration.
+* Added font customization — four bundled OFL-licensed families (Roboto,
+  Open Sans, Merriweather, JetBrains Mono), custom font upload, plus size,
+  color, and opacity. Defaults are unchanged unless explicitly set.
+* Added submenu support: a tile with `"type": "submenu"` opens a nested
+  grid, supporting arbitrary nesting for grouping apps.
+* Fixed Light mode washing out custom backgrounds — the scrim was near-opaque
+  and theme-colored; it's now a light legibility aid that leaves the
+  background visible.
+* Fixed long CPU names clipping in the Settings window (a flexbox
+  `min-width: 0` overflow issue).
+* Fixed accent colors shifting slightly between Dark and Light themes; they
+  now share one definition. Light mode's text color was also darkened from a
+  washed-out charcoal toward true black.
+
+## 0.0.3
+
+* Added a Spotify home screen with horizontally scrolling rows: search,
+  Jump back in, Your Playlists, and mood/genre rows.
+* Added Spotify search with an on-screen controller-navigable keyboard;
+  physical keyboards can type directly.
+* Added a floating overlay scrollbar for Spotify rows, replacing the
+  permanent native scrollbar.
+* Changed search result order to Tracks, Albums, then Playlists.
+
+## 0.0.2
+
+* Changed all on-screen error reporting to write to `error.log` instead —
+  errors previously appeared as toasts or raw command output dumped over the
+  tile grid.
+* Added catch-all handlers so uncaught exceptions and rejected promises are
+  logged rather than lost.
+* Fixed Restart and Shutdown doing nothing from the power menu. Two stacked
+  bugs: the command was spawned detached and reported success without
+  waiting, and the caller never checked the result — so failures were
+  invisible at both layers.
+
+## 0.0.1
+
+* Changed the Spotify Now Playing bar from a permanent fixture to a floating
+  overlay that appears while playing and fades out after pausing.
+* Replaced the local-file/VLC browsing hub with a plain Kodi launch tile —
+  Kodi already provides a full library UI (posters, resume, watched state),
+  so there was nothing worth rebuilding around it.
