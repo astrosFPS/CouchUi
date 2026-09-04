@@ -2,7 +2,7 @@
 set -e
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVICE_FILE="$HOME/.config/systemd/user/couch-launcher.service"
+SERVICE_FILE="$HOME/.config/systemd/user/couch-ui.service"
 
 echo "==> Installing npm dependencies"
 cd "$APP_DIR"
@@ -21,7 +21,7 @@ echo "==> Writing systemd user service ($SERVICE_FILE)"
 mkdir -p "$(dirname "$SERVICE_FILE")"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Couch Launcher (TV-style kiosk)
+Description=CouchUI (TV-style kiosk)
 After=graphical-session.target
 
 [Service]
@@ -35,12 +35,12 @@ WantedBy=graphical-session.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable couch-launcher.service
+systemctl --user enable couch-ui.service
 
 echo ""
 echo "Done. The launcher will start automatically at your next graphical login."
-echo "To start it right now:   systemctl --user start couch-launcher"
-echo "To watch logs:           journalctl --user -u couch-launcher -f"
-echo "To disable autostart:    systemctl --user disable couch-launcher"
+echo "To start it right now:   systemctl --user start couch-ui"
+echo "To watch logs:           journalctl --user -u couch-ui -f"
+echo "To disable autostart:    systemctl --user disable couch-ui"
 echo ""
 echo "Edit config.json to point tiles at your real app binaries and media path."

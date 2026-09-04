@@ -1,13 +1,40 @@
 // ---------- Clock ----------
+// Timezone and 12/24h come from Settings → Location. Intl applies the IANA
+// database's DST rules itself, so a zone like Pacific/Auckland shifts on its
+// own at the right dates with nothing to update here.
+let clockSettings = { timeZone: 'system', clockFormat: 'auto', showSeconds: false };
+let clockTimer = null;
+
 function updateClock() {
   const now = new Date();
-  document.getElementById('clock-time').textContent =
-    now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  document.getElementById('clock-date').textContent =
-    now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
+  const opts = {};
+  if (clockSettings.timeZone && clockSettings.timeZone !== 'system') {
+    opts.timeZone = clockSettings.timeZone;
+  }
+  const timeOpts = { ...opts, hour: '2-digit', minute: '2-digit' };
+  if (clockSettings.showSeconds) timeOpts.second = '2-digit';
+  if (clockSettings.clockFormat === '12') timeOpts.hour12 = true;
+  if (clockSettings.clockFormat === '24') timeOpts.hour12 = false;
+
+  try {
+    document.getElementById('clock-time').textContent =
+      now.toLocaleTimeString([], timeOpts);
+    document.getElementById('clock-date').textContent =
+      now.toLocaleDateString([], { ...opts, weekday: 'long', day: 'numeric', month: 'short' });
+  } catch (err) {
+    // An invalid saved timezone shouldn't leave a blank clock.
+    reportError('clock', `Invalid timezone "${clockSettings.timeZone}": ${err.message}`);
+    clockSettings.timeZone = 'system';
+  }
 }
-setInterval(updateClock, 1000 * 15);
-updateClock();
+
+function restartClock() {
+  clearInterval(clockTimer);
+  // Tick every second only when seconds are actually displayed.
+  clockTimer = setInterval(updateClock, clockSettings.showSeconds ? 1000 : 15000);
+  updateClock();
+}
+restartClock();
 
 // ---------- Weather (Open-Meteo, no API key required) ----------
 // Basic WMO weather_code -> icon/label mapping. Nothing fancy, just the essentials.
@@ -23,20 +50,59 @@ function describeWeatherCode(code) {
   return { icon: '', label: '' };
 }
 
+let weatherSettings = {
+  style: 'detailed', units: 'celsius',
+  showIcon: true, showCondition: true, showLocation: true,
+  showFeelsLike: false, showHumidity: false, showWind: false,
+};
+
 async function loadWeather(config) {
   const { latitude, longitude, locationName } = config.weather || {};
+  const weatherEl = document.querySelector('.weather');
   if (latitude == null || longitude == null) return;
+
+  // 'minimal' is temperature only — no point asking for fields we won't show.
+  const wantsExtras = weatherSettings.style !== 'minimal'
+    && (weatherSettings.showFeelsLike || weatherSettings.showHumidity || weatherSettings.showWind);
+  const fields = ['temperature_2m', 'weather_code']
+    .concat(wantsExtras ? ['apparent_temperature', 'relative_humidity_2m', 'wind_speed_10m'] : []);
+
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=celsius`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}`
+      + `&current=${fields.join(',')}&temperature_unit=${weatherSettings.units}`;
     const res = await fetch(url);
     const data = await res.json();
-    const temp = Math.round(data.current.temperature_2m);
-    const condition = describeWeatherCode(data.current.weather_code);
+    const cur = data.current;
+    const temp = Math.round(cur.temperature_2m);
+    const condition = describeWeatherCode(cur.weather_code);
+
+    weatherEl.dataset.style = weatherSettings.style;
     document.getElementById('weather-temp').textContent = `${temp}°`;
-    document.getElementById('weather-condition').textContent =
-      condition.icon ? `${condition.icon} ${condition.label}` : '';
-    document.getElementById('weather-place').textContent = locationName || '';
+
+    // Condition line — icon and label toggle independently.
+    const conditionParts = [];
+    if (weatherSettings.showIcon && condition.icon) conditionParts.push(condition.icon);
+    if (weatherSettings.showCondition && condition.label) conditionParts.push(condition.label);
+    document.getElementById('weather-condition').textContent = conditionParts.join(' ');
+
+    // Detail line — place plus any enabled extras, hidden entirely in
+    // 'minimal' style so the temperature stands alone.
+    const detailParts = [];
+    if (weatherSettings.style !== 'minimal') {
+      if (weatherSettings.showLocation && locationName) detailParts.push(locationName);
+      if (weatherSettings.showFeelsLike && cur.apparent_temperature != null) {
+        detailParts.push(`Feels ${Math.round(cur.apparent_temperature)}°`);
+      }
+      if (weatherSettings.showHumidity && cur.relative_humidity_2m != null) {
+        detailParts.push(`${Math.round(cur.relative_humidity_2m)}%`);
+      }
+      if (weatherSettings.showWind && cur.wind_speed_10m != null) {
+        detailParts.push(`${Math.round(cur.wind_speed_10m)} km/h`);
+      }
+    }
+    document.getElementById('weather-place').textContent = detailParts.join(' · ');
   } catch (err) {
+    reportError('weather', err.message);
     document.getElementById('weather-place').textContent = 'Weather unavailable';
   }
 }
@@ -252,9 +318,19 @@ async function openSpotifyHome() {
     });
   }
 
+  // What's actually coming up next, so the queue is visible rather than
+  // something you add to blindly.
+  const queueResult = await window.launcher.spotify.getQueue();
+  if (queueResult.ok && queueResult.queue.length) {
+    sections.push({
+      title: 'Up Next',
+      items: queueResult.queue.map((item) => spotifyPlayableTile(item)),
+    });
+  }
+
   if ((result.recentTracks || []).length) {
     sections.push({
-      title: 'Recently Played Songs',
+      title: 'Recently Played Songs — X to queue',
       items: result.recentTracks.map((item) => spotifyPlayableTile(item)),
     });
   }
@@ -296,6 +372,9 @@ function spotifyPlayableTile(item) {
     image: item.image,
     color: '#1DB954',
     playlistId: item.playlistId || null,
+    // Only individual tracks can be queued — queueing a whole playlist
+    // isn't a thing the API supports.
+    trackUri: item.uri && item.uri.startsWith('spotify:track:') ? item.uri : null,
     onActivate: (el) => playSpotifyItem(item.uri, el),
   };
 }
@@ -428,7 +507,7 @@ function renderTileGrid(items) {
     el.innerHTML = tileInnerHTML(item);
     el.addEventListener('click', () => item.onActivate(el));
     tilesContainer.appendChild(el);
-    tileEls.push({ id: item.id, el, onActivate: item.onActivate, playlistId: item.playlistId || null });
+    tileEls.push({ id: item.id, el, onActivate: item.onActivate, playlistId: item.playlistId || null, trackUri: item.trackUri || null });
   });
 
   requestAnimationFrame(buildGrid);
@@ -470,7 +549,7 @@ function renderTileRows(sections) {
       el.addEventListener('click', () => item.onActivate(el));
       stripEl.appendChild(el);
       rowIndices.push(tileEls.length);
-      tileEls.push({ id: item.id, el, onActivate: item.onActivate, playlistId: item.playlistId || null });
+      tileEls.push({ id: item.id, el, onActivate: item.onActivate, playlistId: item.playlistId || null, trackUri: item.trackUri || null });
     });
 
     rowEl.appendChild(stripEl);
@@ -607,6 +686,17 @@ function activateFocused() {
 // the Spotify home "Your Playlists" row (playlistId is only ever set
 // there). Harmless no-op anywhere else, so it's safe to wire to a
 // global button/key without needing to guard the call site.
+// X is contextual: on a playlist tile it pins, on a track tile it queues,
+// and anywhere else it toggles shuffle — so the button always does the
+// most useful thing for whatever is focused.
+async function contextActionFocused() {
+  const idx = grid[focusRow]?.[focusCol];
+  const tile = idx == null ? null : tileEls[idx];
+  if (tile?.playlistId) return togglePinFocused();
+  if (tile?.trackUri) return queueFocused();
+  return spotifyShuffle();
+}
+
 async function togglePinFocused() {
   const idx = grid[focusRow]?.[focusCol];
   if (idx == null) return;
@@ -897,7 +987,7 @@ document.addEventListener('keydown', (e) => {
     case ' ': spotifyToggle(); break;
     case '[': spotifyPrevious(); break;
     case ']': spotifyNext(); break;
-    case 'x': case 'X': togglePinFocused(); break;
+    case 'x': case 'X': contextActionFocused(); break;
   }
 });
 
@@ -971,7 +1061,7 @@ function pollGamepad() {
     else if (powerMenuOpen) closePowerMenu();
     else goBack();
   }
-  if (!powerMenuOpen && !keyboardOpen && xPressed && !lastButtonState[2]) togglePinFocused();
+  if (!powerMenuOpen && !keyboardOpen && xPressed && !lastButtonState[2]) contextActionFocused();
   if (!powerMenuOpen && !keyboardOpen && yPressed && !lastButtonState[3]) spotifyToggle();
   if (!powerMenuOpen && !keyboardOpen && lbPressed && !lastButtonState[4]) spotifyPrevious();
   if (!powerMenuOpen && !keyboardOpen && rbPressed && !lastButtonState[5]) spotifyNext();
@@ -1000,6 +1090,8 @@ const npTrack = document.getElementById('now-playing-track');
 const npArtist = document.getElementById('now-playing-artist');
 const npProgressFill = document.getElementById('np-progress-fill');
 const npToggleBtn = document.getElementById('np-toggle');
+const npShuffleBtn = document.getElementById('np-shuffle');
+let shuffleOn = true;
 
 // Fades out this many ms after playback is paused, so a pause registers
 // visually before the bar drops away rather than vanishing instantly.
@@ -1037,6 +1129,8 @@ async function refreshNowPlaying() {
   // Shows what pressing the button will do next: a pause icon means it's
   // currently playing (press to pause), a play icon means it's paused.
   npToggleBtn.textContent = state.isPlaying ? '⏸' : '▶';
+  shuffleOn = !!state.shuffle;
+  npShuffleBtn.classList.toggle('active', shuffleOn);
   const progressPct = state.durationMs ? Math.min(100, (state.progressMs / state.durationMs) * 100) : 0;
   npProgressFill.style.width = `${progressPct}%`;
   nowPlayingEl.classList.add('visible');
@@ -1045,6 +1139,30 @@ async function refreshNowPlaying() {
   nowPlayingHideTimer = state.isPlaying
     ? null
     : setTimeout(hideNowPlayingNow, NOW_PLAYING_HIDE_DELAY_MS);
+}
+
+async function spotifyShuffle() {
+  const next = !shuffleOn;
+  const result = await window.launcher.spotify.setShuffle(next);
+  if (!result.ok) {
+    reportError('spotify-shuffle', result.error);
+    return;
+  }
+  shuffleOn = next;
+  npShuffleBtn.classList.toggle('active', shuffleOn);
+}
+
+// Adds to the up-next queue instead of interrupting what's playing —
+// the "queue this" behaviour you'd expect from a music app.
+async function queueFocused() {
+  const idx = grid[focusRow]?.[focusCol];
+  if (idx == null) return;
+  const tile = tileEls[idx];
+  if (!tile?.trackUri) return;
+  tile.el.classList.add('launching');
+  const result = await window.launcher.spotify.queue(tile.trackUri);
+  setTimeout(() => tile.el.classList.remove('launching'), 500);
+  if (!result.ok) reportError('spotify-queue', result.error);
 }
 
 async function spotifyToggle() {
@@ -1066,6 +1184,7 @@ async function spotifyPrevious() {
 }
 
 document.getElementById('np-toggle').addEventListener('click', spotifyToggle);
+document.getElementById('np-shuffle').addEventListener('click', spotifyShuffle);
 document.getElementById('np-next').addEventListener('click', spotifyNext);
 document.getElementById('np-prev').addEventListener('click', spotifyPrevious);
 
@@ -1389,10 +1508,25 @@ function applyAppSettings(settings) {
     ? autoContrastTextHex(background.color)
     : null;
   applyFont(settings.font || { family: 'system', scale: 100, opacity: 100 }, autoTextHex);
+
+  if (settings.location) {
+    clockSettings = { ...clockSettings, ...settings.location };
+    restartClock();
+  }
+  if (settings.weather) {
+    weatherSettings = { ...weatherSettings, ...settings.weather };
+    if (appConfig) loadWeather(appConfig);
+  }
 }
 
-
 window.launcher.onSettingsUpdated((settings) => applyAppSettings(settings));
+
+// The weather location lives in config.json, so a change there needs to
+// refresh the widget too — not just app-settings changes.
+window.launcher.onConfigUpdated((config) => {
+  appConfig = config;
+  loadWeather(appConfig);
+});
 
 // ---------- Boot ----------
 (async function init() {

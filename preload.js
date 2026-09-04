@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('launcher', {
   onSettingsUpdated: (callback) => {
     ipcRenderer.on('settings-updated', (event, data) => callback(data));
   },
+  onConfigUpdated: (callback) => {
+    ipcRenderer.on('config-updated', (event, config) => callback(config));
+  },
   spotify: {
     isAuthed: () => ipcRenderer.invoke('spotify-is-authed'),
     login: () => ipcRenderer.invoke('spotify-login'),
@@ -23,5 +26,8 @@ contextBridge.exposeInMainWorld('launcher', {
     next: () => ipcRenderer.invoke('spotify-next'),
     previous: () => ipcRenderer.invoke('spotify-previous'),
     togglePin: (playlistId) => ipcRenderer.invoke('spotify-toggle-pin', playlistId),
+    setShuffle: (state) => ipcRenderer.invoke('spotify-set-shuffle', state),
+    queue: (uri) => ipcRenderer.invoke('spotify-queue', uri),
+    getQueue: () => ipcRenderer.invoke('spotify-get-queue'),
   },
 });

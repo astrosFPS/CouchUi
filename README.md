@@ -1,5 +1,20 @@
 # CouchUI
 
+## First run
+
+`config.json` is intentionally not in the repository — it holds your own
+Spotify client ID and weather location. The app creates it from
+`config.example.json` the first time it starts:
+
+```bash
+npm install
+npm start          # creates config.json from the example
+```
+
+Then edit `config.json` with your own Spotify client ID (see the Spotify
+section below) and weather location. It's listed in `.gitignore`, so your
+credentials stay local and can't be pushed by accident.
+
 A tile-based, controller-first kiosk launcher for Ubuntu — the "Android TV
 box" experience for a PC that boots straight into a living-room UI instead of
 a desktop.
@@ -157,7 +172,7 @@ controller. It has three options:
 `loginctl` talks to systemd-logind and works for the active local user
 without a password by default on stock Ubuntu. If your setup has tightened
 polkit permissions and it silently fails, check
-`journalctl --user -u couch-launcher` for the error — the fix is usually a
+`journalctl --user -u couch-ui` for the error — the fix is usually a
 polkit rule granting `org.freedesktop.login1.reboot`/`power-off` to the
 active session, or falling back to a passwordless `sudo systemctl reboot`
 entry in `/etc/sudoers.d/`.

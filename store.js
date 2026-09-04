@@ -32,6 +32,22 @@ const DEFAULTS = {
   },
   spotify: {
     pinnedPlaylistIds: [],  // playlist ids pinned to the front of "Your Playlists"
+    shuffle: true,           // applied when starting a playlist/album
+  },
+  location: {
+    timeZone: 'system',   // 'system' (follow the OS) or an IANA name e.g. 'Pacific/Auckland'
+    clockFormat: 'auto',   // 'auto' (follow locale) | '12' | '24'
+    showSeconds: false,
+  },
+  weather: {
+    style: 'detailed',   // 'detailed' | 'compact' | 'minimal'
+    units: 'celsius',     // 'celsius' | 'fahrenheit'
+    showIcon: true,
+    showCondition: true,
+    showLocation: true,
+    showFeelsLike: false,
+    showHumidity: false,
+    showWind: false,
   },
 };
 
@@ -61,6 +77,8 @@ function load() {
     font: { ...DEFAULTS.font, ...saved.font },
     updates: { ...DEFAULTS.updates, ...saved.updates },
     spotify: { ...DEFAULTS.spotify, ...saved.spotify },
+    location: { ...DEFAULTS.location, ...saved.location },
+    weather: { ...DEFAULTS.weather, ...saved.weather },
   };
 }
 

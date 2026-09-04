@@ -338,3 +338,64 @@ h2 {
   color: var(--text);
   font-size: 13px;
 }
+
+/* ---- searchable combo (time zone / city pickers) ----
+   A filtered list beats a 418-entry <select> you'd have to scroll. */
+.combo {
+  position: relative;
+}
+
+.combo-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.combo-input:focus {
+  outline: none;
+  border-color: var(--focus);
+}
+
+.combo-list {
+  margin-top: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: none;
+}
+
+.combo-list.open { display: block; }
+
+.combo-option {
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.combo-option:last-child { border-bottom: none; }
+
+.combo-option:hover,
+.combo-option.active {
+  background: var(--surface-hover);
+}
+
+.combo-option .combo-option-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.combo-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}

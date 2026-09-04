@@ -31,4 +31,10 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   setAutoUpdate: (enabled) => ipcRenderer.invoke('set-auto-update', enabled),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  listTimezones: () => ipcRenderer.invoke('list-timezones'),
+  setLocation: (location) => ipcRenderer.invoke('set-location', location),
+  setWeatherDisplay: (weather) => ipcRenderer.invoke('set-weather-display', weather),
+  setWeatherLocation: (loc) => ipcRenderer.invoke('set-weather-location', loc),
+  getConfig: () => ipcRenderer.invoke('get-config'),
 });

@@ -602,3 +602,44 @@ body.bg-uncertain-bottom .hints {
   background: var(--surface-hover);
 }
 
+
+/* ---- weather widget styles (Settings → Weather widget) ----
+   'detailed' is the stacked default already defined above. These two
+   override only what differs, so the shared colour/scale rules still apply. */
+
+/* Compact: everything on one line, right-aligned with the rest of the bar. */
+.weather[data-style="compact"] {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.weather[data-style="compact"] .weather-condition,
+.weather[data-style="compact"] .weather-place {
+  margin: 0;
+}
+
+.weather[data-style="compact"] .weather-temp {
+  font-size: calc(30px * var(--user-font-scale, 1));
+}
+
+/* Minimal: temperature only. The other two lines are emptied by the
+   renderer as well, but hiding them here keeps their margins from
+   contributing any leftover space. */
+.weather[data-style="minimal"] .weather-condition,
+.weather[data-style="minimal"] .weather-place {
+  display: none;
+}
+
+/* Shuffle sits in the transport row but is a state toggle, not an action —
+   so it dims when off and picks up the accent colour when on. */
+.np-btn#np-shuffle {
+  opacity: 0.4;
+}
+
+.np-btn#np-shuffle.active {
+  opacity: 1;
+  color: var(--focus);
+}

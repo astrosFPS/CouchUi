@@ -10,6 +10,8 @@ function showPane(name) {
   if (name === 'storage') refreshStorage();
   if (name === 'appearance') refreshAppearance();
   if (name === 'updates') refreshUpdates();
+  if (name === 'location') refreshLocation();
+  if (name === 'weather') refreshWeatherDisplay();
 }
 
 navItems.forEach((n) => n.addEventListener('click', () => showPane(n.dataset.pane)));
@@ -421,6 +423,230 @@ document.getElementById('check-update-btn').addEventListener('click', async () =
 
 document.getElementById('auto-update-toggle').addEventListener('change', async (e) => {
   await window.settingsAPI.setAutoUpdate(e.target.checked);
+});
+
+// ---------- Location pane ----------
+// A reusable filtered picker. Options can be filtered locally (a fixed
+// list, like time zones) or come back already filtered from an API (city
+// search), in which case filtering again locally would just throw the
+// results away.
+function setupCombo(inputEl, listEl, { getOptions, onPick, minChars = 0, filterLocally = true }) {
+  let options = [];
+  let loadError = null;
+
+  function render(filter) {
+    const q = filter.trim().toLowerCase();
+    if (q.length < minChars) {
+      listEl.classList.remove('open');
+      return;
+    }
+    const matches = (filterLocally
+      ? options.filter((o) => o.search.toLowerCase().includes(q))
+      : options
+    ).slice(0, 60);
+
+    listEl.innerHTML = '';
+    if (loadError) {
+      // A failed lookup and a genuine no-such-place look identical
+      // otherwise, which sends you hunting for the wrong problem.
+      listEl.innerHTML = `<div class="combo-empty">Couldn't search: ${loadError}</div>`;
+      listEl.classList.add('open');
+      return;
+    }
+    if (!matches.length) {
+      listEl.innerHTML = '<div class="combo-empty">No matches.</div>';
+      listEl.classList.add('open');
+      return;
+    }
+    matches.forEach((o) => {
+      const el = document.createElement('div');
+      el.className = 'combo-option';
+      el.innerHTML = o.sub
+        ? `${o.label}<span class="combo-option-sub">${o.sub}</span>`
+        : o.label;
+      el.addEventListener('mousedown', (e) => {
+        // mousedown, not click — blur would close the list first.
+        e.preventDefault();
+        inputEl.value = '';
+        listEl.classList.remove('open');
+        onPick(o.value);
+      });
+      listEl.appendChild(el);
+    });
+    listEl.classList.add('open');
+  }
+
+  async function reload() {
+    try {
+      loadError = null;
+      options = await getOptions(inputEl.value);
+    } catch (err) {
+      loadError = err.message;
+      options = [];
+    }
+    render(inputEl.value);
+  }
+
+  inputEl.addEventListener('input', reload);
+  inputEl.addEventListener('focus', reload);
+  inputEl.addEventListener('blur', () => {
+    setTimeout(() => listEl.classList.remove('open'), 120);
+  });
+}
+
+let cachedTimezones = null;
+
+function describeZone(zone) {
+  // Show each zone's current offset so "which Auckland is this" is obvious.
+  try {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: zone, timeZoneName: 'shortOffset',
+    }).formatToParts(new Date());
+    return parts.find((p) => p.type === 'timeZoneName')?.value || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+setupCombo(
+  document.getElementById('tz-search'),
+  document.getElementById('tz-list'),
+  {
+    async getOptions() {
+      if (!cachedTimezones) {
+        const result = await window.settingsAPI.listTimezones();
+        cachedTimezones = [
+          { value: 'system', label: 'System default', sub: 'Follow the OS setting', search: 'system default' },
+          ...result.zones.map((z) => ({
+            value: z,
+            label: z.replace(/_/g, ' '),
+            sub: describeZone(z),
+            search: z.replace(/_/g, ' '),
+          })),
+        ];
+      }
+      return cachedTimezones;
+    },
+    async onPick(zone) {
+      await window.settingsAPI.setLocation({ timeZone: zone });
+      refreshLocation();
+    },
+  }
+);
+
+setupCombo(
+  document.getElementById('city-search'),
+  document.getElementById('city-list'),
+  {
+    minChars: 2,
+    // Open-Meteo has already matched against the query — filtering again
+    // here would discard every result.
+    filterLocally: false,
+    async getOptions(query) {
+      const q = query.trim();
+      if (q.length < 2) return [];
+      // Fetched here in the renderer, not via IPC to the main process:
+      // this runs on Chromium's network stack, which is the one that
+      // actually works (see the note in main.js).
+      const url = `https://geocoding-api.open-meteo.com/v1/search`
+        + `?name=${encodeURIComponent(q)}&count=8&language=en&format=json`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`geocoding returned ${res.status}`);
+      const data = await res.json();
+      return (data.results || []).map((r) => ({
+        value: {
+          latitude: r.latitude,
+          longitude: r.longitude,
+          name: r.name,
+          timeZone: r.timezone || null,
+        },
+        label: r.name,
+        sub: [r.admin1, r.country].filter(Boolean).join(', '),
+      }));
+    },
+    async onPick(place) {
+      await window.settingsAPI.setWeatherLocation({
+        latitude: place.latitude,
+        longitude: place.longitude,
+        locationName: place.name,
+      });
+      // A city implies its zone — offer that rather than making them
+      // set the same thing twice in two places.
+      if (place.timeZone) {
+        await window.settingsAPI.setLocation({ timeZone: place.timeZone });
+      }
+      refreshLocation();
+    },
+  }
+);
+
+async function refreshLocation() {
+  const [settings, config] = await Promise.all([
+    window.settingsAPI.getAppSettings(),
+    window.settingsAPI.getConfig(),
+  ]);
+  const { timeZone, clockFormat, showSeconds } = settings.location;
+
+  const zoneLabel = timeZone === 'system'
+    ? `System default (${Intl.DateTimeFormat().resolvedOptions().timeZone})`
+    : `${timeZone.replace(/_/g, ' ')} — ${describeZone(timeZone)}`;
+  document.getElementById('tz-current').textContent = `Currently: ${zoneLabel}`;
+
+  document.getElementById('clock-format').value = clockFormat;
+  document.getElementById('clock-seconds').checked = showSeconds;
+
+  const w = config.weather || {};
+  document.getElementById('city-current').textContent = w.locationName
+    ? `Currently: ${w.locationName} (${Number(w.latitude).toFixed(2)}, ${Number(w.longitude).toFixed(2)})`
+    : 'No weather location set.';
+}
+
+document.getElementById('clock-format').addEventListener('change', async (e) => {
+  await window.settingsAPI.setLocation({ clockFormat: e.target.value });
+});
+document.getElementById('clock-seconds').addEventListener('change', async (e) => {
+  await window.settingsAPI.setLocation({ showSeconds: e.target.checked });
+});
+
+// ---------- Weather widget pane ----------
+async function refreshWeatherDisplay() {
+  const settings = await window.settingsAPI.getAppSettings();
+  const w = settings.weather;
+
+  document.querySelectorAll('[data-weather-style]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.weatherStyle === w.style);
+  });
+  document.querySelectorAll('[data-weather-units]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.weatherUnits === w.units);
+  });
+  document.querySelectorAll('[data-weather-field]').forEach((cb) => {
+    cb.checked = !!w[cb.dataset.weatherField];
+    // Minimal style shows temperature only, so the field toggles have no
+    // effect there — disable rather than silently ignore them.
+    cb.disabled = w.style === 'minimal';
+  });
+  document.getElementById('weather-fields-note').textContent =
+    w.style === 'minimal'
+      ? 'Minimal style shows the temperature only — these have no effect.'
+      : 'Choose what appears alongside the temperature.';
+}
+
+document.querySelectorAll('[data-weather-style]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    await window.settingsAPI.setWeatherDisplay({ style: btn.dataset.weatherStyle });
+    refreshWeatherDisplay();
+  });
+});
+document.querySelectorAll('[data-weather-units]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    await window.settingsAPI.setWeatherDisplay({ units: btn.dataset.weatherUnits });
+    refreshWeatherDisplay();
+  });
+});
+document.querySelectorAll('[data-weather-field]').forEach((cb) => {
+  cb.addEventListener('change', async () => {
+    await window.settingsAPI.setWeatherDisplay({ [cb.dataset.weatherField]: cb.checked });
+  });
 });
 
 // ---------- Boot ----------

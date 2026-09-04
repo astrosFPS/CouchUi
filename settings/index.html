@@ -12,7 +12,9 @@
       <div class="nav-item active" data-pane="info">Info</div>
       <div class="nav-item" data-pane="connections">Connections</div>
       <div class="nav-item" data-pane="storage">Storage</div>
+      <div class="nav-item" data-pane="location">Location</div>
       <div class="nav-item" data-pane="appearance">Appearance</div>
+      <div class="nav-item" data-pane="weather">Weather widget</div>
       <div class="nav-item" data-pane="updates">Updates</div>
     </nav>
 
@@ -61,6 +63,50 @@
       <section class="pane" id="pane-storage">
         <h1>Storage</h1>
         <div class="list" id="storage-list"></div>
+      </section>
+
+      <!-- Location -->
+      <section class="pane" id="pane-location">
+        <h1>Location</h1>
+
+        <div class="sub-section">
+          <h2>Time zone</h2>
+          <p class="hint-text">Daylight saving is applied automatically for whichever zone you pick.</p>
+          <div class="combo" id="tz-combo">
+            <input type="text" id="tz-search" class="combo-input" placeholder="Search time zones…" autocomplete="off" />
+            <div class="combo-list" id="tz-list"></div>
+          </div>
+          <p class="hint-text" id="tz-current"></p>
+        </div>
+
+        <div class="sub-section">
+          <h2>Clock</h2>
+          <div class="font-row">
+            <label>Format</label>
+            <select id="clock-format">
+              <option value="auto">Automatic</option>
+              <option value="12">12-hour</option>
+              <option value="24">24-hour</option>
+            </select>
+          </div>
+          <div class="sub-header">
+            <span class="hint-text">Show seconds</span>
+            <label class="switch">
+              <input type="checkbox" id="clock-seconds" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h2>Weather location</h2>
+          <p class="hint-text">Used for the weather widget on the home screen.</p>
+          <div class="combo" id="city-combo">
+            <input type="text" id="city-search" class="combo-input" placeholder="Search for a city…" autocomplete="off" />
+            <div class="combo-list" id="city-list"></div>
+          </div>
+          <p class="hint-text" id="city-current"></p>
+        </div>
       </section>
 
       <!-- Appearance -->
@@ -152,6 +198,46 @@
             <input type="range" id="font-opacity" min="50" max="100" step="5" />
             <span id="font-opacity-value">100%</span>
           </div>
+        </div>
+      </section>
+
+      <!-- Weather widget -->
+      <section class="pane" id="pane-weather">
+        <h1>Weather widget</h1>
+
+        <div class="sub-section">
+          <h2>Style</h2>
+          <div class="theme-options" id="weather-style-options">
+            <button class="theme-btn" data-weather-style="detailed">Detailed</button>
+            <button class="theme-btn" data-weather-style="compact">Compact</button>
+            <button class="theme-btn" data-weather-style="minimal">Minimal</button>
+          </div>
+          <p class="hint-text">Detailed stacks everything; Compact puts it on one line; Minimal is just the temperature.</p>
+        </div>
+
+        <div class="sub-section">
+          <h2>Units</h2>
+          <div class="theme-options" id="weather-unit-options">
+            <button class="theme-btn" data-weather-units="celsius">Celsius</button>
+            <button class="theme-btn" data-weather-units="fahrenheit">Fahrenheit</button>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <h2>Shown information</h2>
+          <p class="hint-text" id="weather-fields-note"></p>
+          <div class="sub-header"><span class="hint-text">Weather icon</span>
+            <label class="switch"><input type="checkbox" data-weather-field="showIcon" /><span class="switch-track"></span></label></div>
+          <div class="sub-header"><span class="hint-text">Condition text</span>
+            <label class="switch"><input type="checkbox" data-weather-field="showCondition" /><span class="switch-track"></span></label></div>
+          <div class="sub-header"><span class="hint-text">Location name</span>
+            <label class="switch"><input type="checkbox" data-weather-field="showLocation" /><span class="switch-track"></span></label></div>
+          <div class="sub-header"><span class="hint-text">Feels-like temperature</span>
+            <label class="switch"><input type="checkbox" data-weather-field="showFeelsLike" /><span class="switch-track"></span></label></div>
+          <div class="sub-header"><span class="hint-text">Humidity</span>
+            <label class="switch"><input type="checkbox" data-weather-field="showHumidity" /><span class="switch-track"></span></label></div>
+          <div class="sub-header"><span class="hint-text">Wind speed</span>
+            <label class="switch"><input type="checkbox" data-weather-field="showWind" /><span class="switch-track"></span></label></div>
         </div>
       </section>
 

@@ -1,4 +1,4 @@
-# CouchTato — Version Log
+# CouchUI — Version Log
 
 Newest first. Entries cover user-facing changes, notable fixes, and
 anything that changes where files live or how things are configured.
@@ -7,6 +7,132 @@ Versions before 0.1.0 are reconstructed retrospectively from the change
 history — they were not tagged at the time.
 
 ---
+
+## 0.4.1
+
+* Added `config.example.json` and a `.gitignore` that excludes
+  `config.json`, so the Spotify client ID and weather location stay local
+  and can't be committed by accident. The app creates `config.json` from
+  the example on first run, so a fresh clone still starts.
+* Added `.gitignore` entries for `node_modules/`, `error.log`, `dist/` and
+  editor noise.
+
+## 0.4.0
+
+* Fixed skip (next/previous) stopping playback instead of changing track.
+  Transport commands were sent without a device id, so Spotify applied them
+  to "the active device" — and when nothing was active, which is normal for
+  a client that just launched or went idle, the call failed and playback
+  simply stopped. Every command now names its device explicitly.
+* Fixed playback failing when Spotify wasn't already open. A freshly
+  launched client registers as a device slightly before it can accept
+  playback, and there was no retry, so the first attempt always lost that
+  race. Play now retries over a few seconds and transfers playback to the
+  device when it isn't the active one.
+* Fixed the lag before a track started. The device was rediscovered from
+  scratch on every action, costing several sequential API round trips
+  before any sound. It's now resolved once, cached, and kept in step with
+  whatever is actually playing.
+* Changed Premium-required errors (403) to fail immediately with a clear
+  message instead of being retried pointlessly.
+* Added a shuffle toggle to the Now Playing bar, saved as a preference and
+  applied when starting a playlist or album. It's set before playback
+  begins so the first track is already shuffled.
+* Added queueing — X on a track appends it to the up-next queue rather than
+  interrupting the current track — and an **Up Next** row on the Spotify
+  home screen showing what's coming.
+* Changed X to be contextual: pin on a playlist, queue on a track, toggle
+  shuffle anywhere else.
+
+## 0.3.3
+
+* Fixed city search failing with "fetch failed". The lookup was running in
+  the main process, which uses Node's network stack rather than Chromium's
+  and so doesn't share its proxy/DNS configuration — it can fail even when
+  the app reaches the network fine elsewhere. Moved it into the settings
+  renderer, the same place the weather lookup already fetches from.
+
+## 0.3.2
+
+* Fixed city search never returning results. API results were being passed
+  through a local text filter that expected a pre-built search string;
+  since they had none, every result was discarded and the list always read
+  "No matches." The filter is now skipped for results a server already
+  matched.
+* Changed the time zone list from all ~418 IANA zones to a curated ~56
+  covering the major population centres and every widely used offset. DST
+  still comes from Intl, so behaviour is unchanged for the zones that
+  remain. Extend `COMMON_TIMEZONES` in `main.js` to add more.
+* Changed a failed city lookup to say why (e.g. a network error) instead of
+  showing the same "No matches." as a genuinely unknown place.
+
+## 0.3.1
+
+* Reverted the resolution scaling introduced and then withdrawn during
+  0.3.0 — it broke the layout. Sizes are back to their fixed values, with
+  the Settings → Appearance font-size slider as the only scaling control.
+  To be revisited.
+
+## 0.3.0
+
+* Added a **Location** tab in Settings: a searchable time zone picker
+  covering all ~418 IANA zones, 12/24-hour clock format, and a
+  seconds toggle. Daylight saving is applied automatically — the zone
+  database and its DST rules come from `Intl`, so there's nothing bundled
+  to go stale.
+* Added a searchable city picker for the weather location (Open-Meteo
+  geocoding, no API key), replacing hand-editing latitude/longitude in
+  `config.json`. Choosing a city also sets the matching time zone.
+* Added a **Weather widget** tab: three layout styles (Detailed, Compact,
+  Minimal), Celsius/Fahrenheit, and independent toggles for the weather
+  icon, condition text, location name, feels-like temperature, humidity,
+  and wind speed. Only the fields actually being shown are requested from
+  the API.
+* Changed the clock to only tick every second when seconds are actually
+  displayed, rather than always.
+* Changed weather failures to log to `error.log` instead of being
+  swallowed silently.
+
+## 0.2.0
+
+* Renamed the project from CouchTato to CouchUI. This covers the display
+  name, the npm package name (`couch-launcher` → `couch-ui`), the project
+  folder (`tv-launcher` → `couch-ui`), and the systemd service
+  (`couch-launcher.service` → `couch-ui.service`).
+
+**Migrating an existing install.** Electron derives its settings directory
+from the package name, so the rename moves it from
+`~/.config/couch-launcher/` to `~/.config/couch-ui/`. Your theme,
+background, font, update and pinned-playlist settings live there, as does
+your Spotify login. Carry them over before first launch:
+
+```bash
+mv ~/.config/couch-launcher ~/.config/couch-ui
+```
+
+Skip this and nothing breaks — you'll just start from defaults and need to
+sign into Spotify again.
+
+If you had autostart enabled, retire the old service too:
+
+```bash
+systemctl --user disable --now couch-launcher.service
+rm -f ~/.config/systemd/user/couch-launcher.service
+./install.sh   # re-registers it as couch-ui.service
+```
+
+## 0.1.1
+
+* Fixed music not playing unless Spotify was already open before starting
+  the launcher. The Web API can only control a player that already exists,
+  so from a cold start there was nothing to play on. CouchUI now starts
+  the Spotify desktop client itself on the first play (or first press of Y)
+  and waits for it to register as a Connect device before playing.
+* Added `spotify.launchCommand` to `config.json` for setups where the
+  desktop client installs under a different command name.
+* Changed the "no device found" error into specific, actionable messages —
+  distinguishing "Spotify isn't installed / wrong command name" from
+  "Spotify started but was too slow to come online".
 
 ## 0.1.0
 

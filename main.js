@@ -10,12 +10,27 @@ const spotify = require('./spotify');
 const updater = require('./updater');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 const ERROR_LOG_PATH = path.join(__dirname, 'error.log');
+
+// config.json holds your Spotify client ID and weather location, so it's
+// kept out of git (see .gitignore) and config.example.json is committed in
+// its place. On a fresh clone there's no config.json yet, so seed one from
+// the example — otherwise the app would have nothing to read.
+function ensureConfigExists() {
+  if (fs.existsSync(CONFIG_PATH)) return;
+  try {
+    fs.copyFileSync(CONFIG_EXAMPLE_PATH, CONFIG_PATH);
+  } catch (err) {
+    console.error('Failed to create config.json from config.example.json:', err.message);
+  }
+}
+ensureConfigExists();
 
 // Running inside a VM (VMware, VirtualBox, etc.) commonly has no real
 // VAAPI-capable GPU exposed to it, which spams "vaInitialize failed"
 // warnings on every launch and can make Chromium's GPU process flaky.
-// CouchTato itself doesn't need hardware-accelerated video — VLC/Kodi run
+// CouchUI itself doesn't need hardware-accelerated video — VLC/Kodi run
 // as their own separate processes and handle their own decoding — so it's
 // safe to just turn it off here. Remove these two lines if you later run
 // on bare metal with a real GPU and want Electron's own UI to use it.
@@ -275,6 +290,71 @@ function scheduleAutoUpdateChecks() {
 
 ipcMain.handle('get-app-version', () => app.getVersion());
 
+// ===================== Location & weather display =====================
+// A curated set rather than the full ~418-zone IANA list — that's far more
+// than anyone scrolls through, and most entries are duplicates of the same
+// offset and rules. These cover the major population centres and every
+// commonly used offset. DST still comes from Intl's own database, so a zone
+// like Pacific/Auckland shifts on its own at the right dates.
+// Add to this list to support somewhere that isn't covered.
+const COMMON_TIMEZONES = [
+  'Pacific/Auckland', 'Pacific/Chatham', 'Pacific/Fiji',
+  'Australia/Sydney', 'Australia/Brisbane', 'Australia/Adelaide',
+  'Australia/Darwin', 'Australia/Perth',
+  'Asia/Tokyo', 'Asia/Seoul', 'Asia/Shanghai', 'Asia/Hong_Kong',
+  'Asia/Singapore', 'Asia/Manila', 'Asia/Jakarta', 'Asia/Bangkok',
+  'Asia/Kolkata', 'Asia/Karachi', 'Asia/Dubai', 'Asia/Tehran',
+  'Asia/Jerusalem', 'Europe/Istanbul', 'Europe/Moscow',
+  'Africa/Cairo', 'Africa/Nairobi', 'Africa/Lagos', 'Africa/Johannesburg',
+  'Europe/Athens', 'Europe/Helsinki', 'Europe/Berlin', 'Europe/Paris',
+  'Europe/Madrid', 'Europe/Rome', 'Europe/Amsterdam', 'Europe/Stockholm',
+  'Europe/Warsaw', 'Europe/Lisbon', 'Europe/London', 'Europe/Dublin',
+  'Atlantic/Reykjavik', 'UTC',
+  'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'America/Santiago',
+  'America/Bogota', 'America/Lima', 'America/New_York', 'America/Toronto',
+  'America/Chicago', 'America/Mexico_City', 'America/Denver',
+  'America/Phoenix', 'America/Los_Angeles', 'America/Vancouver',
+  'America/Anchorage', 'Pacific/Honolulu',
+];
+
+ipcMain.handle('list-timezones', () => ({ ok: true, zones: COMMON_TIMEZONES }));
+
+ipcMain.handle('set-location', (event, location) => {
+  const data = settingsStore.load();
+  data.location = { ...data.location, ...location };
+  settingsStore.save(data);
+  broadcastSettings(data);
+  return { ok: true, data };
+});
+
+ipcMain.handle('set-weather-display', (event, weather) => {
+  const data = settingsStore.load();
+  data.weather = { ...data.weather, ...weather };
+  settingsStore.save(data);
+  broadcastSettings(data);
+  return { ok: true, data };
+});
+
+// Geocoding runs in the settings renderer, not here. Main-process fetch
+// uses Node's network stack rather than Chromium's, so it doesn't pick up
+// the same proxy/DNS configuration and can fail with a bare "fetch failed"
+// on setups where the renderer reaches the network fine. The weather
+// lookup already fetches from the renderer for the same reason.
+
+// The weather location lives in config.json (it's a tile-level concern like
+// the rest of that file), so this writes there rather than app-settings.
+ipcMain.handle('set-weather-location', (event, { latitude, longitude, locationName }) => {
+  try {
+    const config = loadConfig();
+    config.weather = { ...config.weather, latitude, longitude, locationName };
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    if (mainWindow) mainWindow.webContents.send('config-updated', config);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 ipcMain.handle('check-for-update', async () => {
   try {
     const result = await updater.checkForUpdate();
@@ -471,6 +551,58 @@ function spotifyConfig() {
   return config.spotify || {};
 }
 
+// The Web API can only control a Spotify player that already exists — it
+// can't create one. So if nothing is running, every play request fails
+// with "no device found" until the user manually opens Spotify first.
+// This starts the desktop client on their behalf and waits for it to
+// register as a Connect device, which is what actually makes playback
+// possible from a cold start.
+const SPOTIFY_LAUNCH_TIMEOUT_MS = 25000;
+const SPOTIFY_POLL_INTERVAL_MS = 1000;
+
+let spotifyLaunchInFlight = null;
+
+async function ensureSpotifyClient(clientId) {
+  const devices = await spotify.listDevices(clientId);
+  if (devices.length) return;
+
+  // Several tiles can be activated in quick succession; without this,
+  // each one would spawn its own Spotify process.
+  if (spotifyLaunchInFlight) return spotifyLaunchInFlight;
+
+  spotifyLaunchInFlight = (async () => {
+    const command = spotifyConfig().launchCommand || 'spotify';
+    await new Promise((resolve, reject) => {
+      const child = spawn(command, [], { detached: true, stdio: 'ignore' });
+      child.on('error', (err) => {
+        reject(new Error(
+          err.code === 'ENOENT'
+            ? `Couldn't start Spotify: no "${command}" command found. Install the Spotify desktop app, or set spotify.launchCommand in config.json.`
+            : `Couldn't start Spotify: ${err.message}`
+        ));
+      });
+      child.unref();
+      // spawn() reports ENOENT asynchronously, so give it a tick to fail
+      // before treating the launch as successfully started.
+      setTimeout(resolve, 100);
+    });
+
+    const deadline = Date.now() + SPOTIFY_LAUNCH_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, SPOTIFY_POLL_INTERVAL_MS));
+      const found = await spotify.listDevices(clientId);
+      if (found.length) return;
+    }
+    throw new Error('Started Spotify but it didn\'t come online in time. Try again in a moment.');
+  })();
+
+  try {
+    await spotifyLaunchInFlight;
+  } finally {
+    spotifyLaunchInFlight = null;
+  }
+}
+
 ipcMain.handle('spotify-is-authed', () => ({ ok: true, authed: spotify.isAuthed() }));
 
 ipcMain.handle('spotify-login', async () => {
@@ -517,10 +649,47 @@ ipcMain.handle('spotify-toggle-pin', (event, playlistId) => {
 ipcMain.handle('spotify-play', async (event, uri) => {
   try {
     const { clientId } = spotifyConfig();
-    await spotify.playAny(clientId, uri);
+    await ensureSpotifyClient(clientId);
+    const { shuffle } = settingsStore.load().spotify;
+    await spotify.playAny(clientId, uri, { shuffle });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('spotify-set-shuffle', async (event, state) => {
+  try {
+    const { clientId } = spotifyConfig();
+    const data = settingsStore.load();
+    data.spotify.shuffle = !!state;
+    settingsStore.save(data);
+    // Apply immediately if something is already playing; if nothing is,
+    // the saved preference gets used on the next play.
+    await spotify.setShuffle(clientId, !!state).catch(() => {});
+    return { ok: true, shuffle: !!state };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('spotify-queue', async (event, uri) => {
+  try {
+    const { clientId } = spotifyConfig();
+    await ensureSpotifyClient(clientId);
+    await spotify.queueUri(clientId, uri);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('spotify-get-queue', async () => {
+  try {
+    const { clientId } = spotifyConfig();
+    return { ok: true, queue: await spotify.getQueue(clientId) };
+  } catch (err) {
+    return { ok: false, error: err.message, queue: [] };
   }
 });
 
@@ -547,6 +716,7 @@ ipcMain.handle('spotify-get-state', async () => {
 ipcMain.handle('spotify-toggle', async () => {
   try {
     const { clientId } = spotifyConfig();
+    await ensureSpotifyClient(clientId);
     await spotify.togglePlayback(clientId);
     return { ok: true };
   } catch (err) {
