@@ -399,3 +399,41 @@ h2 {
   font-size: 13px;
   color: var(--text-dim);
 }
+
+/* ---- scrollbars ----
+   The settings window is a normal desktop window used with a mouse, so
+   unlike the launcher (where they're hidden outright) a scrollbar is still
+   useful here — it just shouldn't be the default bright white strip that
+   ignores the theme. Slim, themed, and it uses the same variables as
+   everything else so it follows Dark/Light automatically. */
+* {
+  scrollbar-width: thin;                             /* Firefox */
+  scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  /* Inset the thumb so it reads as a floating pill rather than a
+     full-width bar butted against the edge. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

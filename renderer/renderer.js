@@ -217,11 +217,6 @@ async function openWaydroidHub(tile) {
     tilesContainer.innerHTML = '<div class="tile-subtitle" style="padding:12px;">Couldn\'t load Android apps — see error.log for details.</div>';
     return;
   }
-  if (!result.apps.length) {
-    tilesContainer.innerHTML = '<div class="tile-subtitle" style="padding:12px;">No Android apps installed yet. Use "waydroid app install &lt;apk&gt;" from a terminal.</div>';
-    return;
-  }
-
   const items = [
     {
       id: '__back__',
@@ -230,6 +225,16 @@ async function openWaydroidHub(tile) {
       color: '#5A5D66',
       onActivate: () => goHome(),
     },
+    {
+      id: '__install_apk__',
+      label: '＋ Install APK',
+      subtitle: 'Browse for a file',
+      color: '#7ED17E',
+      onActivate: () => openApkBrowser(tile),
+    },
+    // No apps yet is a normal state on a fresh Waydroid, not an error —
+    // the Install tile above is exactly what you need at that point, so
+    // the grid still renders rather than being replaced by a message.
     ...result.apps.map((app) => ({
       id: app.packageName,
       label: app.name,
@@ -239,6 +244,121 @@ async function openWaydroidHub(tile) {
     })),
   ];
   renderTileGrid(items);
+}
+
+// ---------- APK browser (Waydroid → Install APK) ----------
+// A tile-grid file browser rather than the native file dialog, which is
+// mouse-only and would mean reaching for a keyboard mid-couch. Starts in
+// Downloads (where APKs generally land) and shows only .apk files by
+// default, with a toggle for everything else.
+let apkBrowserStack = [];      // directories visited, for B to walk back out
+let apkShowAllFiles = false;
+let apkBrowserTile = null;     // the Waydroid tile, to return to afterwards
+
+async function openApkBrowser(tile) {
+  apkBrowserTile = tile;
+  apkShowAllFiles = false;
+  const paths = await window.launcher.getCommonPaths();
+  apkBrowserStack = [];
+  showApkDirectory(paths.downloads);
+}
+
+async function showApkDirectory(dirPath, { push = true } = {}) {
+  view = 'apk-browser';
+  viewHeading.hidden = false;
+
+  const result = await window.launcher.listDirectory({ dirPath, showAll: apkShowAllFiles });
+  if (!result.ok) {
+    reportError('list-directory', `${dirPath}: ${result.error}`);
+    // A missing or unreadable folder shouldn't strand you — fall back to
+    // home rather than leaving an empty grid with no way out.
+    const paths = await window.launcher.getCommonPaths();
+    if (dirPath !== paths.home) return showApkDirectory(paths.home, { push });
+    tilesContainer.innerHTML = '<div class="tile-subtitle" style="padding:12px;">Couldn\'t read that folder — see error.log.</div>';
+    return;
+  }
+
+  if (push) apkBrowserStack.push(result.path);
+  viewTitle.textContent = `Install APK — ${result.path} — B to go back`;
+
+  const items = [
+    {
+      id: '__back__',
+      label: '← Back',
+      subtitle: apkBrowserStack.length > 1 ? 'Previous folder' : 'Android Apps',
+      color: '#5A5D66',
+      onActivate: () => goBack(),
+    },
+    {
+      id: '__toggle_filter__',
+      label: apkShowAllFiles ? 'Showing all files' : 'Showing APKs only',
+      subtitle: apkShowAllFiles ? 'Select to show APKs only' : 'Select to show all files',
+      color: '#E8A33D',
+      onActivate: () => {
+        apkShowAllFiles = !apkShowAllFiles;
+        // Re-render the same folder without adding another stack entry.
+        apkBrowserStack.pop();
+        showApkDirectory(result.path);
+      },
+    },
+  ];
+
+  if (result.parent) {
+    items.push({
+      id: '__parent__',
+      label: '↑ Up one level',
+      subtitle: result.parent,
+      color: '#5A5D66',
+      onActivate: () => showApkDirectory(result.parent),
+    });
+  }
+
+  result.folders.forEach((f) => {
+    items.push({
+      id: `dir:${f.path}`,
+      label: f.name,
+      subtitle: 'Folder',
+      icon: 'folder',
+      color: '#2D9CDB',
+      onActivate: () => showApkDirectory(f.path),
+    });
+  });
+
+  result.files.forEach((f) => {
+    items.push({
+      id: `file:${f.path}`,
+      label: f.name,
+      subtitle: f.isApk ? 'APK — select to install' : 'Not an APK',
+      color: f.isApk ? '#7ED17E' : '#5A5D66',
+      onActivate: (el) => {
+        if (!f.isApk) {
+          // Visible in "all files" mode, but Waydroid can only install APKs.
+          reportError('install-apk', `${f.name} is not an APK`);
+          return;
+        }
+        installApk(f.path, el);
+      },
+    });
+  });
+
+  renderTileGrid(items);
+}
+
+async function installApk(apkPath, el) {
+  el.classList.add('launching');
+  viewTitle.textContent = 'Installing… this can take a while — B to go back';
+
+  const result = await window.launcher.installApk(apkPath);
+  el.classList.remove('launching');
+
+  if (!result.ok) {
+    reportError('install-apk', result.error);
+    viewTitle.textContent = 'Install failed — see error.log — B to go back';
+    return;
+  }
+  // Back to the app list, which re-queries Waydroid — so the new app
+  // appearing there is the confirmation, rather than trusting an exit code.
+  openWaydroidHub(apkBrowserTile);
 }
 
 async function launchWaydroidApp(packageName, el) {
@@ -713,6 +833,13 @@ async function togglePinFocused() {
 function goBack() {
   if (view === 'waydroid') {
     goHome();
+  } else if (view === 'apk-browser') {
+    // Walk back out the way you came in, one folder per press, rather than
+    // jumping straight out of the browser from wherever you'd got to.
+    apkBrowserStack.pop();
+    const previous = apkBrowserStack.pop();
+    if (previous) showApkDirectory(previous);
+    else openWaydroidHub(apkBrowserTile);
   } else if (view === 'spotify') {
     if (spotifyView === 'search') openSpotifyHome();
     else goHome();

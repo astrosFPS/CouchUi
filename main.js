@@ -797,6 +797,65 @@ ipcMain.handle('list-waydroid-apps', async () => {
 });
 
 // --- IPC: launch a specific Android app inside Waydroid by package name ---
+// --- Browsing the filesystem for an APK ---
+// The native file dialog is mouse-and-keyboard only, which is no use from
+// a couch, so the renderer draws its own tile-grid browser and this just
+// supplies directory listings. Nothing here takes a shell string — the
+// path is used directly and commands run via execFile with an argument
+// array, so a filename can't turn into a command.
+ipcMain.handle('list-directory', (event, { dirPath, showAll = false } = {}) => {
+  try {
+    const target = path.resolve(dirPath || os.homedir());
+    const entries = fs.readdirSync(target, { withFileTypes: true });
+
+    const folders = entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => ({ name: e.name, path: path.join(target, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const files = entries
+      .filter((e) => {
+        if (!e.isFile() || e.name.startsWith('.')) return false;
+        // APK-only is the default; showAll opens it up to everything else.
+        return showAll || path.extname(e.name).toLowerCase() === '.apk';
+      })
+      .map((e) => ({
+        name: e.name,
+        path: path.join(target, e.name),
+        isApk: path.extname(e.name).toLowerCase() === '.apk',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      ok: true,
+      path: target,
+      parent: path.dirname(target) === target ? null : path.dirname(target),
+      folders,
+      files,
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-common-paths', () => ({
+  ok: true,
+  home: os.homedir(),
+  downloads: path.join(os.homedir(), 'Downloads'),
+}));
+
+ipcMain.handle('install-apk', async (event, apkPath) => {
+  try {
+    // No timeout: installs of a large APK legitimately take a while, and
+    // killing one part-way is worse than waiting.
+    const { stdout, stderr } = await execFileAsync('waydroid', ['app', 'install', apkPath]);
+    return { ok: true, output: (stdout || stderr || '').trim() };
+  } catch (err) {
+    logError('install-apk', `${apkPath}: ${err.stderr?.trim() || err.message}`);
+    return { ok: false, error: err.stderr?.trim() || err.message };
+  }
+});
+
 ipcMain.handle('launch-waydroid-app', (event, packageName) => {
   try {
     const child = spawn('waydroid', ['app', 'launch', packageName], {

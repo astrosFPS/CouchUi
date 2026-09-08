@@ -8,6 +8,44 @@ history — they were not tagged at the time.
 
 ---
 
+## 0.5.0
+
+* Added APK installation to the Waydroid hub: an **＋ Install APK** tile
+  opens a controller-navigable file browser starting in `~/Downloads`.
+  Built as a tile grid rather than the native file dialog, which is
+  mouse-and-keyboard only and unusable from a couch.
+* Added an APK-only filter as the default, with a toggle tile to show all
+  files. Folders are always listed so navigation still works; hidden files
+  are excluded either way, and `.APK` matches case-insensitively.
+* Changed the Waydroid hub to still render its grid when no apps are
+  installed. It previously replaced the whole grid with a message telling
+  you to install one from a terminal — which also hid the Install tile, at
+  exactly the moment it's most useful.
+* Install confirmation comes from re-querying the app list rather than the
+  command's exit code, so a listed app is real evidence it worked.
+
+## 0.4.3
+
+* Fixed the white native scrollbar showing down the right of the Spotify
+  home screen. The horizontal scrollbars on each row were hidden back in
+  0.0.3, but the vertical one on the container holding them never was.
+* Changed this to a house rule rather than another one-off: native
+  scrollbars are now hidden across the whole launcher via a `*` selector,
+  so a new scrolling container can't reintroduce one. The floating
+  `.row-scrollbar` is the pattern to use where an indicator is wanted.
+* Changed the settings window scrollbars to a slim themed style instead of
+  hiding them — it's a normal desktop window used with a mouse, so a
+  scrollbar is still useful there; it just shouldn't be the default white.
+
+## 0.4.2
+
+* Added `push.sh` — commits and pushes to your git remote, defaulting the
+  commit message to the current version so history lines up with this file.
+* Added a safety check to `push.sh` that refuses to push if `config.json`
+  has somehow become tracked by git. `.gitignore` only covers untracked
+  files, so a config committed before the ignore rule existed would keep
+  going out with every push; this catches that and explains how to undo it.
+
 ## 0.4.1
 
 * Added `config.example.json` and a `.gitignore` that excludes

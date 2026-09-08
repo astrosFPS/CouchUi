@@ -5,6 +5,23 @@
 
 * { box-sizing: border-box; }
 
+/* ---- no native scrollbars, anywhere in the launcher ----
+   This is a kiosk UI driven by a controller from across the room: there's
+   no pointer to grab a scrollbar with, and the native one renders as a
+   bright white strip that fights every theme and custom background.
+   Scrolling still works (the D-Pad scrolls focus into view); where a
+   position indicator is genuinely useful, use the floating .row-scrollbar
+   pattern further down instead. Applies to every element so a new
+   scrolling container can't reintroduce one by accident. */
+* {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;        /* legacy Edge */
+}
+
+*::-webkit-scrollbar {
+  display: none;                    /* Chromium / WebKit */
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -485,11 +502,6 @@ body.bg-uncertain-bottom .hints {
   overflow-x: auto;
   padding-bottom: 6px;
   scroll-behavior: smooth;
-  scrollbar-width: none; /* Firefox */
-}
-
-.tile-row-strip::-webkit-scrollbar {
-  display: none; /* Chromium — replaced by the floating .row-scrollbar below */
 }
 
 /* Floating "overlay" scrollbar: a slim pill that tracks scroll position and
